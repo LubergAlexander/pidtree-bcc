@@ -1,5 +1,5 @@
 ---
 masks:
-  - subnet_name: 192_168
+  - subnet_name: 192168
     network: 192.168.0.0
     network_mask_length: 16

@@ -49,12 +49,11 @@ int kretprobe__tcp_v4_connect(struct pt_regs *ctx)
     u32 saddr = 0, daddr = 0;
     u16 dport = 0;
     bpf_probe_read(&daddr, sizeof(daddr), &skp->__sk_common.skc_daddr);
-    // Nasty hack to not match 192.168 networks
     u8 first_octet = first_n_octets(1, daddr);
-    u16 first_two_octets = first_n_octets(2, daddr);
-    if (first_octet == first_octet_10
-         || first_octet == first_octet_127
-         || first_two_octets == first_two_octets_192_168) {
+    u32 first_two_octets = first_n_octets(2, daddr);
+    if (0 // for easier templating {% for mask in masks %}
+         || first_two_octets == subnet_{{ mask["subnet_name"] }}
+    {% endfor %}) {
         currsock.delete(&pid);
         return 0;
     }
@@ -74,6 +73,7 @@ int kretprobe__tcp_v4_connect(struct pt_regs *ctx)
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, help="yaml file containing subnet safelist information")
+    parser.add_argument("-p", "--print-and-quit", action='store_true', default=False, help="don't run, just print the eBPF program to be compiled and quit")
     args = parser.parse_args()
     if args.config is not None and not os.path.exists(args.config):
         os.stderr.write("--config file does not exist")
@@ -105,9 +105,10 @@ def main(args):
         binary_encode=binary_encode,
         masks=config.get("masks", []),
         )
-    print(expanded_bpf_text)
-    sys.exit(0)
-    b = BPF(text=bpf_text)
+    if args.print_and_quit:
+        print(expanded_bpf_text)
+        sys.exit(0)
+    b = BPF(text=expanded_bpf_text)
     while True:
         trace = b.trace_readline()
         json_event = trace.split(":", 2)[2:][0]
