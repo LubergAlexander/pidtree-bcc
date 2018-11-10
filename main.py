@@ -7,12 +7,17 @@ import psutil
 import os
 import socket
 import struct
+from jinja2 import Template
 
 bpf_text = """
 #include <net/sock.h>
 #include <bcc/proto.h>
 
 #define first_n_octets(n, ip) (ip<<(n*8))>>(n*8)
+{% for mask in masks %}
+#define subnet_{{ mask["subnet_name"] }} {{ binary_encode(mask["network"], mask["network_mask_length"]) }}
+#define subnet_{{ mask["subnet_name"] }}_length {{ mask["network_mask_length"] }}
+{% endfor %}
 #define first_two_octets_192_168 0xa8c0
 #define first_octet_10 0xa
 #define first_octet_127 0x7f
@@ -74,6 +79,16 @@ def parse_args():
         os.stderr.write("--config file does not exist")
     return(args)
 
+def parse_config(config_file):
+    if config_file is None:
+        return {}
+    return yaml.load(open(config_file, 'r').read())
+
+def binary_encode(network, mask_length):
+    mask_length = int(mask_length)
+    network = (struct.unpack('<L', socket.inet_aton(network))[0] << mask_length) >> mask_length
+    return "0b{0:b}".format(network)
+    
 def crawl_process_tree(proc):
     procs = [proc]
     while True:
@@ -84,7 +99,14 @@ def crawl_process_tree(proc):
     return procs
     
 def main(args):
+    config = parse_config(args.config)
     global bpf_text
+    expanded_bpf_text = Template(bpf_text).render(
+        binary_encode=binary_encode,
+        masks=config.get("masks", []),
+        )
+    print(expanded_bpf_text)
+    sys.exit(0)
     b = BPF(text=bpf_text)
     while True:
         trace = b.trace_readline()
