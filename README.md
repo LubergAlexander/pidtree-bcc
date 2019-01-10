@@ -67,3 +67,6 @@ because of the rudimentary subnet filters I've included in the eBPF program.
 This is obviously not an exhaustive list of loopback or RFC1918 addresses, and
 for any generally usable tool I would like to see these ranges, ports and
 protocols be configurable.
+
+## Notes
+`#pragma unroll` is your friend

@@ -3,3 +3,20 @@ masks:
   - subnet_name: 192168
     network: 192.168.0.0
     network_mask_length: 16
+    description: "192.168/16 RFC1918 addresses"
+  - subnet_name: 10
+    network: 10.0.0.0
+    network_mask_length: 8
+    description: "10/8 RFC1918 addresses"
+  - subnet_name: 17216
+    network: 172.16.0.0
+    network_mask_length: 8
+    description: "172.16/12 RFC1918 addresses"
+  - subnet_name: test
+    network: 138.64.0.0
+    network_mask_length: 10
+    description: "test network"
+    #  - subnet_name: test2
+    #    network: 138.68.0.0
+    #    network_mask_length: 16
+    #    description: "test network"

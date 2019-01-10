@@ -13,14 +13,12 @@ bpf_text = """
 #include <net/sock.h>
 #include <bcc/proto.h>
 
-#define first_n_octets(n, ip) (ip<<(n*8))>>(n*8)
+#define first_n_bits(n, ip) (ip<<(32 - n))>>(32 - n)
 {% for mask in masks %}
+// {{ mask.get("description", mask["subnet_name"]) }}
 #define subnet_{{ mask["subnet_name"] }} {{ binary_encode(mask["network"], mask["network_mask_length"]) }}
 #define subnet_{{ mask["subnet_name"] }}_length {{ mask["network_mask_length"] }}
 {% endfor %}
-#define first_two_octets_192_168 0xa8c0
-#define first_octet_10 0xa
-#define first_octet_127 0x7f
 
 BPF_HASH(currsock, u32, struct sock *);
 
@@ -49,10 +47,11 @@ int kretprobe__tcp_v4_connect(struct pt_regs *ctx)
     u32 saddr = 0, daddr = 0;
     u16 dport = 0;
     bpf_probe_read(&daddr, sizeof(daddr), &skp->__sk_common.skc_daddr);
-    u8 first_octet = first_n_octets(1, daddr);
-    u32 first_two_octets = first_n_octets(2, daddr);
+    {% for length in mask_lengths %}
+    u32 first_{{ length }}_bits = first_n_bits({{ length }}, daddr);
+    {% endfor %}
     if (0 // for easier templating {% for mask in masks %}
-         || first_two_octets == subnet_{{ mask["subnet_name"] }}
+         || (u32) first_{{ mask["network_mask_length"] }}_bits == (u32) subnet_{{ mask["subnet_name"] }}
     {% endfor %}) {
         currsock.delete(&pid);
         return 0;
@@ -71,6 +70,7 @@ int kretprobe__tcp_v4_connect(struct pt_regs *ctx)
 """
 
 def parse_args():
+    """ Parses args """
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, help="yaml file containing subnet safelist information")
     parser.add_argument("-p", "--print-and-quit", action='store_true', default=False, help="don't run, just print the eBPF program to be compiled and quit")
@@ -80,16 +80,27 @@ def parse_args():
     return(args)
 
 def parse_config(config_file):
+    """ Parses yaml file at path `config_file` """
     if config_file is None:
         return {}
     return yaml.load(open(config_file, 'r').read())
 
 def binary_encode(network, mask_length):
-    mask_length = int(mask_length)
-    network = (struct.unpack('<L', socket.inet_aton(network))[0] << mask_length) >> mask_length
-    return "0b{0:b}".format(network)
+    """ Takes an IP and a mask and returns the binary encoding of the masked bits """
+    binary_encode = ""
+    inverse_mask_length = 32 - int(mask_length)
+    network = (struct.unpack('!L', socket.inet_aton(network))[0] >> inverse_mask_length) << inverse_mask_length
+    for j in range(0,4):
+        for i in range(0,8):
+            print i + j
+            if network & 1 << (i + (j * 8)):
+                binary_encode = binary_encode + "1"
+            else:
+                binary_encode = binary_encode + "0"
+    return "0b{}".format(binary_encode)
     
 def crawl_process_tree(proc):
+    """ Takes a process and returns all process ancestry until the ppid is 0 """
     procs = [proc]
     while True:
         ppid = procs[len(procs)-1].ppid()
@@ -101,16 +112,22 @@ def crawl_process_tree(proc):
 def main(args):
     config = parse_config(args.config)
     global bpf_text
+    all_mask_lengths = []
+    if config.get("masks") is not None:
+        all_mask_lengths = set([mask["network_mask_length"] for mask in config["masks"]])
     expanded_bpf_text = Template(bpf_text).render(
         binary_encode=binary_encode,
         masks=config.get("masks", []),
-        )
+        mask_lengths=all_mask_lengths
+    )
     if args.print_and_quit:
         print(expanded_bpf_text)
         sys.exit(0)
     b = BPF(text=expanded_bpf_text)
     while True:
         trace = b.trace_readline()
+        print(trace)
+        # FIXME: this next line isn't right - sometimes there are more colons
         json_event = trace.split(":", 2)[2:][0]
         event = json.loads(json_event)
         proc = None
