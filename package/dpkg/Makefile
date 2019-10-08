@@ -23,6 +23,9 @@ export CONTROL_CONTENTS
 
 default: pidtree-bcc_$(VERSION).deb
 
+local-build:
+	make VERSION=$(VERSION) TAG=$(shell git rev-parse HEAD) REMOTE=$(shell git rev-parse --show-toplevel)
+
 src/pidtree-bcc_$(TAG):
 	mkdir -p src
 	git clone $(REMOTE) src/pidtree-bcc_$(TAG)
@@ -58,9 +61,6 @@ $(BUILD_DIR)/DEBIAN:
 
 pidtree-bcc_$(VERSION).deb: $(BUILD_DIR)/DEBIAN $(BUILD_DIR)/etc/systemd/system/pidtree-bcc.service $(BUILD_DIR)/usr/bin/pidtree-bcc $(BUILD_DIR)/etc/pidtree-bcc/config.yml $(ROOTFS)
 	sudo dpkg-deb --build $(basename $@)
-
-run-nodocker: $(ROOTFS)
-	sudo unshare --net --mount --propagation slave --uts --ipc --fork ./enter-ns.sh
 
 clean:
 	rm -rf $(BUILD_DIR)

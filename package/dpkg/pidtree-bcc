@@ -2,10 +2,11 @@
 rootfs=$1
 shift
 args=$@
-mkdir -p $rootfs/proc $rootfs/dev $rootfs/sys
+mkdir -p $rootfs/proc $rootfs/dev $rootfs/sys/kernel/debug $rootfs/etc/pidtree-bcc
 touch $rootfs/etc/resolv.conf
 mount -o ro,bind /etc/resolv.conf $rootfs/etc/resolv.conf
 mount -o ro,bind /etc/passwd $rootfs/etc/passwd
+mount -o ro,bind /etc/pidtree-bcc $rootfs/etc/pidtree-bcc
 mount --rbind /proc $rootfs/proc
 mount --rbind /dev $rootfs/dev
 exec chroot $rootfs /work/run.sh $@
